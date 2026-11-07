@@ -1,28 +1,26 @@
 'use strict';
+const bcrypt = require('bcryptjs');
 
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up (queryInterface, Sequelize) {
-    /**
-     * Add seed commands here. Assumes timestamps are disabled.
-     */
+    const saltRounds = 10;
     await queryInterface.bulkInsert('teachers', [
       {
         teacher_name: 'Tamisa',
         NUPTK: '654321',
         email: 'tamisa@teachers.com',
-        password: 'Tamisa123'
+        password: await bcrypt.hash('Tamisa123', saltRounds)
       },
       {
         teacher_name: 'Danang',
         NUPTK: '543216',
         email: 'danang@teachers.com',
-        password: 'Danang123'
+        password: await bcrypt.hash('Danang123', saltRounds)
       }
     ], {});
   },
 
-  // No down migration since seeds are permanent
   async down (queryInterface, Sequelize) {
     // intentionally left blank
   }

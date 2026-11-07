@@ -1,13 +1,13 @@
 var express = require('express');
 var router = express.Router();
-const jwt = require('jsonwebtoken')
-const student = require('../../models/studentModel')
-const teacher = require('../../models/teacherModel')
-const admin = require('../../models/adminModel')
-const bcrypt = require('bcryptjs')
+const jwt = require('jsonwebtoken');
+const student = require('../../models/studentModel');
+const teacher = require('../../models/teacherModel');
+const admin = require('../../models/adminModel');
+const bcrypt = require('bcryptjs');
 
-//post untuk login dnegan email dan password untuk siswa dan guru
-    router.post('/login', async (req, res) => {
+// POST untuk login dengan email dan password untuk siswa, guru, dan admin
+router.post('/login', async (req, res) => {
     let { email, password } = req.body;
 
     if (!email) return res.status(400).json({ message: 'Email required' });
@@ -40,12 +40,12 @@ const bcrypt = require('bcryptjs')
 
         if (!user) return res.status(401).json({ message: 'Email wrong' });
 
-        if (userType === 'student') {
-            const isMatch = await bcrypt.compare(password, user.password);
-            if (!isMatch) return res.status(401).json({ message: 'Password wrong' });
-        } else {
-            if (password !== user.password) return res.status(401).json({ message: 'Password wrong' });
-        }
+        // Verifikasi password dengan bcrypt (mendukung hash $2a/$2b dan fallback plaintext untuk backward compatibility)
+        const isMatch = (user.password && user.password.startsWith('$2'))
+            ? await bcrypt.compare(password, user.password)
+            : password === user.password;
+
+        if (!isMatch) return res.status(401).json({ message: 'Password wrong' });
 
         let payload = {};
         if (userType === 'student') {
@@ -62,6 +62,6 @@ const bcrypt = require('bcryptjs')
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
-    });
+});
 
 module.exports = router;
