@@ -6,7 +6,7 @@ const { student } = require('../config/database/table/controler')
 class tryoutModel {
     static async getall() {
         try {
-            const [rows] = await db.query("SELECT t.tryout_id, t.tryout_name, t.status, COUNT(q.question_id) AS total_questions, (SELECT SUM(minimal_questions) FROM subjects) AS total_minimal_questions FROM tryouts t LEFT JOIN questions q ON q.id_tryout = t.tryout_id GROUP BY t.tryout_id, t.tryout_name, t.status")
+            const [rows] = await db.query("SELECT t.tryout_id, t.tryout_name, t.status, COALESCE(t.exam_mode, 'demo') AS exam_mode, COUNT(q.question_id) AS total_questions, (SELECT SUM(minimal_questions) FROM subjects) AS total_minimal_questions FROM tryouts t LEFT JOIN questions q ON q.id_tryout = t.tryout_id GROUP BY t.tryout_id, t.tryout_name, t.status, t.exam_mode")
             return rows
         } catch (err){
             throw err
@@ -15,7 +15,8 @@ class tryoutModel {
 
     static async store(data) {
         try {
-            const [result] = await db.query("insert into tryouts set tryout_name = ?", {replacements: [data.tryout_name]})
+            const exam_mode = data.exam_mode === 'standard' ? 'standard' : 'demo';
+            const [result] = await db.query("insert into tryouts set tryout_name = ?, exam_mode = ?", {replacements: [data.tryout_name, exam_mode]})
             return result
         } catch (err) {
             throw err
@@ -24,7 +25,15 @@ class tryoutModel {
 
     static async update(id, data) {
         try {
-            const [result] = await db.query("update tryouts set tryout_name = ? where tryout_id = ?", {replacements: [data.tryout_name, id]})
+            let sql = "update tryouts set tryout_name = ?";
+            const replacements = [data.tryout_name];
+            if (data.exam_mode) {
+                sql += ", exam_mode = ?";
+                replacements.push(data.exam_mode === 'standard' ? 'standard' : 'demo');
+            }
+            sql += " where tryout_id = ?";
+            replacements.push(id);
+            const [result] = await db.query(sql, {replacements})
             return result
         } catch (err) {
             throw err
@@ -42,7 +51,7 @@ class tryoutModel {
 
     static async getTryoutQuestionById(tryoutId) {
       try {
-          const [rows] = await db.query("SELECT JSON_OBJECT('tryout_name', t.tryout_name, 'status', t.status, 'subject_categories', (SELECT JSON_ARRAYAGG(JSON_OBJECT('subject_category', sc.subject_category_name, 'items', (SELECT JSON_ARRAYAGG(JSON_OBJECT('id_subject', subj.subject_id, 'subject_name', subj.subject_name, 'minimal_questions', subj.minimal_questions, 'soal_dibuat', subj.jumlah_soal)) FROM (SELECT s.subject_id, s.subject_name, s.minimal_questions, COUNT(q.question_id) AS jumlah_soal FROM subjects s LEFT JOIN questions q ON q.id_subject = s.subject_id AND q.id_tryout = t.tryout_id WHERE s.id_subject_category = sc.subject_category_id GROUP BY s.subject_id, s.subject_name, s.minimal_questions) AS subj))) FROM subject_categories sc)) AS result FROM tryouts t WHERE t.tryout_id = ?", {replacements: [tryoutId]})
+          const [rows] = await db.query("SELECT JSON_OBJECT('tryout_name', t.tryout_name, 'status', t.status, 'exam_mode', COALESCE(t.exam_mode, 'demo'), 'subject_categories', (SELECT JSON_ARRAYAGG(JSON_OBJECT('subject_category', sc.subject_category_name, 'items', (SELECT JSON_ARRAYAGG(JSON_OBJECT('id_subject', subj.subject_id, 'subject_name', subj.subject_name, 'minimal_questions', subj.minimal_questions, 'soal_dibuat', subj.jumlah_soal)) FROM (SELECT s.subject_id, s.subject_name, s.minimal_questions, COUNT(q.question_id) AS jumlah_soal FROM subjects s LEFT JOIN questions q ON q.id_subject = s.subject_id AND q.id_tryout = t.tryout_id WHERE s.id_subject_category = sc.subject_category_id GROUP BY s.subject_id, s.subject_name, s.minimal_questions) AS subj))) FROM subject_categories sc)) AS result FROM tryouts t WHERE t.tryout_id = ?", {replacements: [tryoutId]})
           return rows[0]
       } catch (err) {
           throw err
@@ -282,12 +291,44 @@ class tryoutModel {
     }
   }
 
-  static async getSubjectById(idSubject) {
+  static async getSubjectById(idSubject, idTryout = null) {
     try {
       const [rows] = await db.query(`SELECT s.time_limit AS total_waktu,sc.subject_category_name AS kategori_subjek, s.subject_name AS subjek FROM subjects s JOIN subject_categories sc ON s.id_subject_category = sc.subject_category_id WHERE s.subject_id = ?`,
         { replacements: [idSubject] }
-      )
-      return rows[0]
+      );
+      if (!rows[0]) return null;
+      const subject = { ...rows[0] };
+
+      const UTBK_OFFICIAL_TIMES = {
+        1: 45,
+        2: 30,
+        3: 25,
+        4: 30,
+        5: 15,
+        6: 20,
+        7: 30
+      };
+
+      let isStandard = false;
+      if (idTryout) {
+        const [tryoutRows] = await db.query(
+          "SELECT exam_mode FROM tryouts WHERE tryout_id = ?",
+          { replacements: [idTryout] }
+        );
+        if (tryoutRows[0] && tryoutRows[0].exam_mode === 'standard') {
+          isStandard = true;
+        }
+      }
+
+      if (process.env.EXAM_MODE === 'standard') {
+        isStandard = true;
+      }
+
+      if (isStandard && UTBK_OFFICIAL_TIMES[Number(idSubject)]) {
+        subject.total_waktu = UTBK_OFFICIAL_TIMES[Number(idSubject)];
+      }
+
+      return subject;
     } catch (err) {
       throw err
     }
@@ -385,7 +426,7 @@ class tryoutModel {
         JOIN subjects s ON s.subject_id = q.id_subject
         JOIN subject_categories sc ON sc.subject_category_id = s.id_subject_category
         WHERE t.tryout_id = ?
-        GROUP BY t.tryout_id, t.tryout_name`,
+        GROUP BY t.tryout_id, t.tryout_name, t.exam_mode`,
         { replacements: [idTryout] }
       )
       return rows[0]

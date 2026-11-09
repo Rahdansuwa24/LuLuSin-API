@@ -29,7 +29,7 @@ router.get('/student/tryout', verifyToken, authorize(['student']), async (req, r
       const { idTryout } = req.params
 
       const getTryout = await tryoutModel.getTryoutName(idTryout)
-      const getSubject = await subjectModel.getTotalQuestionAndTotalTime()
+      const getSubject = await subjectModel.getTotalQuestionAndTotalTime(idTryout)
 
       res.status(200).json({ data: getSubject, getTryout })
     } catch (error) {
@@ -46,7 +46,7 @@ router.get("/student/tryout/:idTryout/:idSubject/taking", verifyToken, authorize
   
     try {
       const studentData = await tryoutModel.getStudentById(idStudent)
-      const subjectData = await tryoutModel.getSubjectById(idSubject)
+      const subjectData = await tryoutModel.getSubjectById(idSubject, idTryout)
       const questionData = await tryoutModel.getQuestionsBySubjectId(idSubject, idTryout, studentId)
       res.status(200).json({ studentData, subjectData, questionData })
     } catch (error) {

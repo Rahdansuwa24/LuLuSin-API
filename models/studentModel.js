@@ -38,7 +38,7 @@ class studentModel {
     static async getDoneTryouts(idStudent) {
         try {
             const [result] = await db.query(
-                `SELECT DISTINCT t.tryout_id, t.tryout_name FROM students_answers sa JOIN answer_options ao ON sa.answer_options_id = ao.answer_option_id JOIN questions q ON ao.id_question = q.question_id JOIN tryouts t ON q.id_tryout = t.tryout_id WHERE sa.id_student = ? AND t.status = 'show'`,
+                `SELECT DISTINCT t.tryout_id, t.tryout_name, COALESCE(t.exam_mode, 'demo') AS exam_mode FROM students_answers sa JOIN answer_options ao ON sa.answer_options_id = ao.answer_option_id JOIN questions q ON ao.id_question = q.question_id JOIN tryouts t ON q.id_tryout = t.tryout_id WHERE sa.id_student = ? AND t.status = 'show'`,
                 { replacements: [idStudent] }
             )
             return result
@@ -50,7 +50,7 @@ class studentModel {
     static async getNotDoneTryouts(idStudent) {
         try {
             const [result] = await db.query(
-                `SELECT t.tryout_id, t.tryout_name FROM tryouts t WHERE t.status = 'show' AND t.tryout_id NOT IN ( SELECT q.id_tryout FROM students_answers sa JOIN answer_options ao ON sa.answer_options_id = ao.answer_option_id JOIN questions q ON ao.id_question = q.question_id WHERE sa.id_student = ? )`,
+                `SELECT t.tryout_id, t.tryout_name, COALESCE(t.exam_mode, 'demo') AS exam_mode FROM tryouts t WHERE t.status = 'show' AND t.tryout_id NOT IN ( SELECT q.id_tryout FROM students_answers sa JOIN answer_options ao ON sa.answer_options_id = ao.answer_option_id JOIN questions q ON ao.id_question = q.question_id WHERE sa.id_student = ? )`,
                 { replacements: [idStudent] }
             )
             return result

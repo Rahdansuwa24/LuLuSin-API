@@ -20,8 +20,8 @@ router.get('/teacher/tryout', verifyToken, authorize(['teacher']), async (req, r
 
 //post judl tryout
 router.post('/teacher/tryout/create', verifyToken, authorize(['teacher']), async (req, res, next) => {
-    let { tryout_name } = req.body
-    let data = { tryout_name }
+    let { tryout_name, exam_mode } = req.body
+    let data = { tryout_name, exam_mode }
 
     if (!tryout_name) return res.status(400).json({ message: 'tryout_name is required.' })
 
@@ -36,8 +36,8 @@ router.post('/teacher/tryout/create', verifyToken, authorize(['teacher']), async
 //edit judul tryout
 router.patch('/teacher/tryout/update/:id', verifyToken, authorize(['teacher']), async (req, res, next) => {
     let id = req.params.id
-    let { tryout_name } = req.body
-    let data = { tryout_name }
+    let { tryout_name, exam_mode } = req.body
+    let data = { tryout_name, exam_mode }
 
     if (!tryout_name) return res.status(400).json({ message: 'tryout_name is required.' })
 

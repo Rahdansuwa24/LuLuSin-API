@@ -46,17 +46,33 @@ class subjectModel {
         }
     }
 
-    static async getTotalQuestionAndTotalTime(subjectId) {
+    static async getTotalQuestionAndTotalTime(idTryout = null) {
         try {
             const [result] = await db.query(
                 `SELECT SUM(minimal_questions) AS total_minimal_questions, SUM(time_limit) AS total_time_limit FROM subjects`)
-            return result[0]
+            const data = { ...result[0] }
+
+            let isStandard = false
+            if (idTryout) {
+                const [tRows] = await db.query("SELECT exam_mode FROM tryouts WHERE tryout_id = ?", { replacements: [idTryout] })
+                if (tRows[0] && tRows[0].exam_mode === 'standard') {
+                    isStandard = true
+                }
+            } else if (process.env.EXAM_MODE === 'standard') {
+                isStandard = true
+            }
+
+            if (isStandard) {
+                data.total_time_limit = 195
+            }
+
+            return data
         } catch (err) {
             throw err
         }
     }
     
-        static async getSubjectAndCB(idSubject) {
+    static async getSubjectAndCB(idSubject) {
         try {
             const [result] = await db.query("SELECT sc.subject_category_name AS kategori, s.subject_id, s.subject_name AS subjek FROM subjects AS s JOIN subject_categories AS sc ON s.id_subject_category = sc.subject_category_id WHERE s.subject_id = ?", { replacements: [idSubject]})
             return result
