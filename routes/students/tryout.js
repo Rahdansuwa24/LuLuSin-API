@@ -210,4 +210,28 @@ router.get('/student/tryout/:idTryout/result', verifyToken, authorize(['student'
   }
 })
 
+
+// Endpoint untuk mendiskualifikasi siswa (pelanggaran keluar ujian 3x) dengan nilai 0
+router.post("/student/tryout/:idTryout/disqualify", verifyToken, authorize(["student"]), async (req, res) => {
+  const { idTryout } = req.params;
+  const studentId = req.user.id;
+
+  try {
+    const isAlreadyCalculated = await tryoutModel.isScoreAlreadyCalculated(idTryout, studentId);
+    if (isAlreadyCalculated) {
+      return res.status(200).json({ message: "Tryout sudah diselesaikan sebelumnya.", status: "ALREADY_COMPLETED" });
+    }
+
+    await tryoutModel.disqualifyStudentTryout(studentId, idTryout);
+
+    res.status(200).json({
+      message: "Siswa didiskualifikasi dari tryout karena pelanggaran.",
+      status: "DISQUALIFIED",
+      score: 0
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 module.exports = router

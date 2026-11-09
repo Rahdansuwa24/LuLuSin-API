@@ -748,6 +748,49 @@ static async insertEmptyAnswersIfNotExist({ idStudent, idTryout }) {
     }
   }
 }
+
+  static async disqualifyStudentTryout(studentId, tryoutId) {
+    try {
+      const subjectIds = await this.getSubjectsInTryout(tryoutId);
+
+      // Bersihkan data skor parsial tryout ini jika ada sebelumnya
+      await db.query("DELETE FROM tryout_subject_scores WHERE id_tryout = ? AND id_student = ?", {
+        replacements: [tryoutId, studentId]
+      });
+      await db.query("DELETE FROM tryout_scores WHERE id_tryout = ? AND id_student = ?", {
+        replacements: [tryoutId, studentId]
+      });
+
+      // Hitung total butir soal dalam tryout
+      let totalQuestions = 0;
+      try {
+        const [totalQRows] = await db.query("SELECT COUNT(*) as total FROM questions WHERE id_tryout = ?", {
+          replacements: [tryoutId]
+        });
+        totalQuestions = totalQRows[0]?.total || 0;
+      } catch (e) {
+        totalQuestions = 0;
+      }
+
+      // Masukkan skor 0 untuk setiap subjek pada tryout
+      for (const subjectId of subjectIds) {
+        await db.query(
+          "INSERT INTO tryout_subject_scores (id_student, id_subject, id_tryout, average_score, total_correct, total_wrong, total_empty) VALUES (?, ?, ?, 0, 0, 0, 0)",
+          { replacements: [studentId, subjectId, tryoutId] }
+        );
+      }
+
+      // Masukkan skor 0 ke tryout_scores
+      const [result] = await db.query(
+        "INSERT INTO tryout_scores (id_student, id_tryout, average_score, total_correct, total_wrong, total_empty) VALUES (?, ?, 0, 0, 0, ?)",
+        { replacements: [studentId, tryoutId, totalQuestions] }
+      );
+
+      return result;
+    } catch (err) {
+      throw err;
+    }
+  }
 }
 
-module.exports = tryoutModel
+module.exports = tryoutModel;
