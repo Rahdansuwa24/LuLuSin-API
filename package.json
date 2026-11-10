@@ -4,6 +4,10 @@
     "description": "",
     "main": "app.js",
     "scripts": {
+        "start": "node app.js",
+        "dev": "nodemon app.js",
+        "db:init": "node scripts/init-db.js",
+        "db:seed": "npx sequelize-cli db:seed:all",
         "test": "mocha"
     },
     "dependencies": {
