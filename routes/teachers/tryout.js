@@ -1,3 +1,5 @@
+const multer = require('multer');
+const uploadExcel = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 var express = require('express')
 var router = express.Router()
 const tryout = require('../../models/tryoutModel')
@@ -329,5 +331,31 @@ router.delete('/teacher/tryout/:tryout_id/:subject_id/:question_id/delete', veri
   }
 });
 
+
+
+// Import soal secara massal via Excel/CSV
+router.post('/teacher/tryout/:tryout_id/:subject_id/import_excel', verifyToken, authorize(['teacher']), uploadExcel.single('file'), async (req, res) => {
+  try {
+    const { tryout_id, subject_id } = req.params;
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ message: 'File Excel (.xlsx, .xls, .csv) wajib diunggah.' });
+    }
+
+    const result = await tryout.importQuestionsFromExcel({
+      tryout_id: parseInt(tryout_id, 10),
+      subject_id: parseInt(subject_id, 10),
+      buffer: req.file.buffer
+    });
+
+    res.status(200).json({
+      success: true,
+      count: result.count,
+      message: `Berhasil mengimpor ${result.count} butir soal ke subtes ini!`
+    });
+  } catch (error) {
+    console.error('Import Excel Error:', error);
+    res.status(400).json({ message: error.message || 'Gagal memproses file Excel.' });
+  }
+});
 
 module.exports = router

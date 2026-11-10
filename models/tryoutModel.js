@@ -1,3 +1,4 @@
+const xlsx = require('xlsx');
 const { db } = require('../config/database/connection')
 const { Sequelize, QueryTypes } = require('sequelize')
 const { student } = require('../config/database/table/controler')
@@ -832,6 +833,102 @@ static async insertEmptyAnswersIfNotExist({ idStudent, idTryout }) {
       throw err;
     }
   }
+
+  static async importQuestionsFromExcel({ tryout_id, subject_id, buffer }) {
+    const workbook = xlsx.read(buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    if (!sheetName) throw new Error('File Excel tidak memiliki lembar kerja (sheet).');
+
+    const sheet = workbook.Sheets[sheetName];
+    const rawRows = xlsx.utils.sheet_to_json(sheet, { defval: '' });
+
+    if (!rawRows || rawRows.length === 0) {
+      throw new Error('File Excel kosong atau tidak memiliki data baris.');
+    }
+
+    const transaction = await db.transaction();
+    try {
+      let insertedCount = 0;
+
+      for (const row of rawRows) {
+        const getVal = (...keys) => {
+          for (const k of keys) {
+            const match = Object.keys(row).find(
+              rowKey => rowKey.trim().toLowerCase() === k.toLowerCase()
+            );
+            if (match && row[match] !== undefined && row[match] !== null) {
+              const val = String(row[match]).trim();
+              if (val.length > 0) return val;
+            }
+          }
+          return '';
+        };
+
+        const questionText = getVal('pertanyaan', 'soal', 'question', 'isi soal');
+        if (!questionText) {
+          continue;
+        }
+
+        const optA = getVal('opsi a', 'pilihan a', 'a', 'jawaban a');
+        const optB = getVal('opsi b', 'pilihan b', 'b', 'jawaban b');
+        const optC = getVal('opsi c', 'pilihan c', 'c', 'jawaban c');
+        const optD = getVal('opsi d', 'pilihan d', 'd', 'jawaban d');
+        const optE = getVal('opsi e', 'pilihan e', 'e', 'jawaban e');
+
+        if (!optA || !optB || !optC || !optD || !optE) {
+          throw new Error(`Soal "${questionText.substring(0, 30)}..." harus memiliki 5 pilihan jawaban (A, B, C, D, E).`);
+        }
+
+        const rawKey = getVal('kunci', 'kunci jawaban', 'jawaban benar', 'kunci_jawaban', 'correct_answer', 'key').toUpperCase();
+        const keyMap = { 'A': 0, 'B': 1, 'C': 2, 'D': 3, 'E': 4, '1': 0, '2': 1, '3': 2, '4': 3, '5': 4 };
+        const correctIndex = keyMap[rawKey];
+        if (correctIndex === undefined) {
+          throw new Error(`Kunci jawaban untuk soal "${questionText.substring(0, 30)}..." tidak valid ("${rawKey}"). Gunakan opsi A, B, C, D, atau E.`);
+        }
+
+        const rawScore = getVal('skor', 'score', 'bobot', 'nilai');
+        const score = parseInt(rawScore, 10) || 100;
+        const explanation = getVal('pembahasan', 'penjelasan', 'explanation', 'keterangan') || 'Pembahasan belum tersedia.';
+
+        // 1. Simpan pertanyaan
+        const [questionId] = await db.query(
+          "INSERT INTO questions (id_tryout, id_subject, question, question_image, score) VALUES (?, ?, ?, ?, ?)",
+          { replacements: [tryout_id, subject_id, questionText, null, score], transaction, type: QueryTypes.INSERT }
+        );
+
+        // 2. Simpan 5 opsi jawaban
+        const options = [optA, optB, optC, optD, optE];
+        const insertedOptionIds = [];
+        for (const optText of options) {
+          const [optionId] = await db.query(
+            "INSERT INTO answer_options (id_question, answer_option) VALUES (?, ?)",
+            { replacements: [questionId, optText], transaction, type: QueryTypes.INSERT }
+          );
+          insertedOptionIds.push(optionId);
+        }
+
+        // 3. Hubungkan opsi benar dengan pembahasan di questions_explanations
+        const correctOptionId = insertedOptionIds[correctIndex];
+        await db.query(
+          "INSERT INTO questions_explanations (id_answer_option, question_explanation) VALUES (?, ?)",
+          { replacements: [correctOptionId, explanation], transaction, type: QueryTypes.INSERT }
+        );
+
+        insertedCount++;
+      }
+
+      if (insertedCount === 0) {
+        throw new Error('Tidak ada baris soal valid yang dapat diimpor.');
+      }
+
+      await transaction.commit();
+      return { count: insertedCount };
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+
 }
 
 module.exports = tryoutModel;
